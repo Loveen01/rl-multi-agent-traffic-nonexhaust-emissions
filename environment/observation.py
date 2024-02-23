@@ -77,7 +77,7 @@ class SharedObservationFunction(DefaultObservationFunction):
             low=np.zeros(self.space_dim, dtype=np.float32),
             high=np.ones(self.space_dim, dtype=np.float32),
         )
-    
+
 
 class EntireObservationFunction(ObservationFunction):
     """Class that returns observations of all traffic signals in multi-agent networks."""

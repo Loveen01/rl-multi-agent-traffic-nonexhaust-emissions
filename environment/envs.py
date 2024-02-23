@@ -20,6 +20,8 @@ from environment.helper_functions import get_total_waiting_time, get_tyre_pm
 
 LIBSUMO = "LIBSUMO_AS_TRACI" in os.environ
 
+# This file was taken from repo, https://github.com/case547/masters-proj/blob/master/envs.py, and has been altered to suit needs 
+
 # this class ensures that we count rewards, instead of bypassing that delta_time period, it counts the rewards during delta time, 
 # and returns this reward_hold dict as the computed rewards 
 # overrides step(), _run_steps() and _compute_rewards()
@@ -386,7 +388,8 @@ class RealMultiAgentSumoEnv(SumoEnvironmentPZ):
                 "mean_speed": 0.0 if len(vehicles) == 0 else np.mean(speeds),
             }
             
-            # AGENTS
+            # AGENTS - TODO: Not truly multi-agent. self.controlled_lanes contains lanes of all agents. 
+            # You want to be able to track metrics for every agent? and compare with how fixed time control works no? 
             observable_vehs = []
             for lane in self.controlled_lanes: # lo. 
                 observable_vehs += self.get_observable_vehs(lane)
@@ -441,7 +444,7 @@ class RealMultiAgentSumoEnv(SumoEnvironmentPZ):
             return
 
         if not LIBSUMO:
-            traci.switch(self.label)
+            traci.switch(self.env.label)
         traci.close()
 
         # Help completely release SUMO port between episodes to address
