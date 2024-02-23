@@ -1,0 +1,102 @@
+import os 
+import pathlib
+
+import sumo_rl
+from sumo_rl.environment.env import env, parallel_env, SumoEnvironment
+
+import ray
+
+from ray import air, tune
+
+from ray.tune import register_env
+from ray.rllib.env import PettingZooEnv, ParallelPettingZooEnv
+from ray.rllib.algorithms import ppo 
+from ray.rllib.env.wrappers.multi_agent_env_compatibility import MultiAgentEnvCompatibility
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
+
+from pettingzoo.utils.conversions import aec_to_parallel_wrapper
+from pettingzoo.utils import wrappers
+
+from environment.envs import RealMultiAgentSumoEnv
+from environment.observation import Grid2x2ObservationFunction, EntireObservationFunction
+from environment.reward_functions import combined_reward
+
+from utils.environment_creator import par_env_2x2_creator
+
+from datetime import datetime
+os.environ["PYTHONWARNINGS"] = 'ignore::DeprecationWarning'
+
+os.environ['SUMO_HOME'] = '/opt/homebrew/opt/sumo/share/sumo'
+os.environ['RAY_PICKLE_VERBOSE_DEBUG'] = '1'
+
+ray.init()
+
+# params for env creator
+env_folder = "data/2x2grid"
+env_name = "2x2grid"
+seed = 8
+evaluation_dir = "outputs"
+metrics_csv = os.path.join(evaluation_dir, env_name, f"seed_{seed}.csv")
+metrics_csv_abs =  os.path.abspath(metrics_csv)
+
+# create a new environment with rllib 
+par_env = par_env_2x2_creator(seed=seed, eval=False, csv_path=metrics_csv_abs)
+
+# convert to Parallel Petting Zoo with the RLLIB wrapper 
+rllib_compat_ppz_env_par = ParallelPettingZooEnv(par_env) 
+
+ray.rllib.utils.check_env(rllib_compat_ppz_env_par)
+
+register_env(name=env_name, env_creator= lambda config : rllib_compat_ppz_env_par) # register env
+
+num_gpus= 2
+
+ppo_config : ppo.PPOConfig
+
+ppo_config = (ppo.PPOConfig()
+        .environment(env_name)
+        .resources(num_gpus=num_gpus)
+        .rollouts(num_rollout_workers=4)
+        .multi_agent(
+                policies=rllib_compat_ppz_env_par._agent_ids,
+                policy_mapping_fn=(lambda agent_id, *args, **kwargs: agent_id),
+        )
+        .framework(framework="torch")
+        .evaluation(
+            evaluation_parallel_to_training=False, 
+            evaluation_interval = 10,
+            evaluation_duration = 10000,
+            evaluation_duration_unit = "timesteps"
+        )
+        .training(gamma = 0.97,
+                lr= 1e-4,
+                grad_clip = 0.1,
+            lambda_=0.95,
+            kl_coeff=0.5,
+            clip_param=0.1,
+            vf_clip_param=10.0,
+            entropy_coeff=0.01,
+            train_batch_size=1000,
+            sgd_minibatch_size=100,
+            num_sgd_iter=10,
+            # model = NotProvided)
+        )
+        .fault_tolerance(recreate_failed_workers=True)
+)
+
+cwd = os.getcwd()
+save_checkpoint_direc = 'ray_results'
+save_directory = os.path.join(cwd, save_checkpoint_direc)
+
+current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+dir_path = os.path.join(save_directory, env_name)
+
+tune.run(
+    "PPO",
+    name=f"PPO_{current_time}",
+    stop={"timesteps_total": 100000},
+    checkpoint_freq=10,
+    local_dir=dir_path,
+    config=ppo_config.to_dict(),
+)
