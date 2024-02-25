@@ -11,33 +11,25 @@ class Config:
         self.action_dim = 4
         
         # NN-specific info 
-        self.lr = 1e-4
         self.no_hidden_layers = 100
+        self.lr = 1e-4
 
         # Sampling 
-        self.no_episodes = 5
-        self.rollout_length = 200      # aka timesteps in each trajectory/rollout
-
+        self.no_episodes = 3            # Next try 1400 episodes 
+        self.rollout_length = 150       # Aka timesteps in each trajectory/rollout, next try 720 
+                                        
         # Training 
-        self.no_training_iterations = 3
+        self.no_training_iterations = 100
 
-        # optimisation
-        self.optimisation_epochs = 10    # how many times same data should be used to reshuffle to minibatches and make optimisation updates 
-        self.minibatch_size = 20        # minibatch_size < batch size * no_episodes 
+        # Optimisation
+        self.optimisation_epochs =  40   # how many times same data should be used to reshuffle to minibatches and make optimisation updates 
+        self.minibatch_size = 100      # minibatch_size < batch size * no_episodes 
         
         # PPO 
         self.discount = 0.97
         self.ppo_ratio_clip = 0.1
         self.gae_lamda = 0.95
-        # self.max_steps = 4e5
 
-        # logging
-        self.logger_dir = 1
-        self.play_only = False
-        self.saved_checkpoint = 'checkpoint/models_info.txt'
-
-
-
-        # self.log_interval = 100
-        # self.gae_tau = 0.95
-        # self.gradient_clip = 4.7
+        # Logging
+        # self.play_only = False
+        # self.save_model_path = 

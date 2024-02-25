@@ -389,7 +389,7 @@ class RealMultiAgentSumoEnv(SumoEnvironmentPZ):
             }
             
             # AGENTS - TODO: Not truly multi-agent. self.controlled_lanes contains lanes of all agents. 
-            # You want to be able to track metrics for every agent? and compare with how fixed time control works no? 
+            # You want to be able to track metrics for every agent? to be able to compare with how fixed time control works?
             observable_vehs = []
             for lane in self.controlled_lanes: # lo. 
                 observable_vehs += self.get_observable_vehs(lane)

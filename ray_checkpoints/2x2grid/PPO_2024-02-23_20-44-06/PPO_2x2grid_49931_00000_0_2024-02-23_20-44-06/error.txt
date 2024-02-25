@@ -1,0 +1,31 @@
+Failure # 1 (occurred at 2024-02-23_20-44-21)
+The actor died because of an error raised in its creation task, [36mray::PPO.__init__()[39m (pid=16160, ip=127.0.0.1, actor_id=20bfd6d73307ccd8e66a3f1e01000000, repr=PPO)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/ray/rllib/algorithms/algorithm.py", line 517, in __init__
+    super().__init__(
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/ray/tune/trainable/trainable.py", line 161, in __init__
+    self.setup(copy.deepcopy(self.config))
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/ray/rllib/algorithms/algorithm.py", line 672, in setup
+    _, env_creator = self._get_env_id_and_creator(
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/ray/rllib/algorithms/algorithm.py", line 2294, in _get_env_id_and_creator
+    return env_specifier, _global_registry.get(ENV_CREATOR, env_specifier)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/ray/tune/registry.py", line 270, in get
+    return pickle.loads(value)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/gymnasium/utils/ezpickle.py", line 35, in __setstate__
+    out = type(self)(*d["_ezpickle_args"], **d["_ezpickle_kwargs"])
+  File "/Users/loveen/Desktop/Masters project/rl-multi-agent-traffic-nonexhaust-emissions/environment/envs.py", line 300, in __init__
+    super().__init__(**kwargs)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/sumo_rl/environment/env.py", line 505, in __init__
+    self.env = SumoEnvironment(**self._kwargs)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/sumo_rl/environment/env.py", line 149, in __init__
+    traci.start([sumolib.checkBinary("sumo"), "-n", self._net], label="init_connection" + self.label)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/traci/main.py", line 147, in start
+    result = init(sumoPort, numRetries, "localhost", label, sumoProcess, doSwitch, traceFile, traceGetters)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/traci/main.py", line 119, in init
+    return con.getVersion()
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/traci/connection.py", line 381, in getVersion
+    result = self._sendCmd(command, None, None)
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/traci/connection.py", line 231, in _sendCmd
+    return self._sendExact()
+  File "/Users/loveen/.pyenv/versions/3.9.10/lib/python3.9/site-packages/traci/connection.py", line 137, in _sendExact
+    raise FatalTraCIError("Connection closed by SUMO.")
+traci.exceptions.FatalTraCIError: Connection closed by SUMO.

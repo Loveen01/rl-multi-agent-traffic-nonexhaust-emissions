@@ -1,0 +1,131 @@
+import os 
+import ray 
+
+import csv
+
+from ray.tune import register_env
+from ray.rllib.env import ParallelPettingZooEnv
+from ray.rllib.algorithms import ppo 
+
+from utils.environment_creator import par_env_2x2_creator
+
+import pandas as pd
+import numpy as np
+
+ray.init()
+
+ENV_NAME = "2x2grid"
+seed = 9
+evaluation_dir = "test_results"
+
+metrics_csv = os.path.abspath(os.path.join(evaluation_dir, ENV_NAME, f"seed_{seed}", f"seed_{seed}.csv"))
+tb_log_dir = os.path.abspath(os.path.join(evaluation_dir, ENV_NAME, f"seed_{seed}"))
+
+# create a new environment for eval
+par_env = par_env_2x2_creator(seed=seed, eval=True, csv_path=metrics_csv, tb_log_dir=tb_log_dir)
+rllib_compat_ppz_env_par = ParallelPettingZooEnv(par_env) 
+
+# you still have to register the environment - even during eval
+register_env(name=ENV_NAME, env_creator= lambda config : rllib_compat_ppz_env_par) # register env
+
+checkpoint_path = "ray_checkpoints/2x2grid/PPO_2024-02-24_13-17/PPO_2x2grid_15bda_00000_0_2024-02-24_13-17-39/checkpoint_000009"
+checkpoint_path_abs = os.path.abspath(checkpoint_path)
+
+loaded_ppo_agent = ppo.PPO.from_checkpoint(checkpoint_path_abs)
+
+results = loaded_ppo_agent.evaluate()
+
+print(results)
+ray.shutdown()
+
+
+
+
+
+
+
+# create a new environment, then restore checkpoint - is this the right way ?
+
+# params for env creator
+# seed = 8
+# evaluation_dir = "outputs"
+# env_name="2x2grid"
+# metrics_csv = os.path.abspath(os.path.join(evaluation_dir, env_name, f"seed_{seed}.csv"))
+
+# # create a new environment with rllib 
+# par_env = par_env_2x2_creator(seed=8, eval=True, csv_path=metrics_csv)
+# rllib_par_env = ParallelPettingZooEnv(par_env)
+
+# # register env 
+# register_env(env_name, lambda config: rllib_par_env)
+
+# config: ppo.PPOConfig
+# config = (
+#     ppo.PPOConfig()
+#     .environment(env=env_name)
+#     .framework(framework="torch")
+#     .rollouts(
+#         num_rollout_workers=4,
+#     )
+#     .training(
+#     )
+#     .evaluation(
+#         # evaluation_duration=200,
+#         # evaluation_duration_unit='timesteps',
+#         # evaluation_num_workers=1,
+#         # evaluation_interval = 10,
+#         # # evaluation_sample_timeout_s=300,
+#         # evaluation_parallel_to_training = False
+#     )
+#     .debugging(seed=seed)
+#     # .resources(num_gpus=0.05)
+#     .multi_agent(
+#         policies=set(rllib_par_env._agent_ids),
+#         policy_mapping_fn=(lambda agent_id, *args, **kwargs: agent_id),
+#     )
+#     .fault_tolerance(recreate_failed_workers=True)
+# )
+
+# ppo_new_agent = config.build()
+
+# ppo_loaded_agent = ppo_new_agent.from_checkpoint(checkpoint_path_abs)    # does this function restore the policy neural network states, etc .... 
+
+# ppo_loaded_agent.config
+
+# results = ppo_loaded_agent.evaluate() # does it evaluate in a new environment or uses the same environment? we need to start randomly on a different state??? 
+
+# print(results)
+
+# ray.shutdown()
+
+
+# # # Collate results
+# # df = pd.read_csv(metrics_csv)
+# # total_arrived = sum(df["arrived_num"][:3600])
+
+# # total_sys_tyre_pm = sum(df["sys_tyre_pm"][:3600])
+# # mean_sys_stopped = np.mean(df["sys_stopped"][:3600])
+# # mean_sys_total_wait = np.mean(df["sys_total_wait"][:3600])
+# # mean_sys_avg_wait = np.mean(df["sys_avg_wait"][:3600])
+# # mean_sys_avg_speed = np.mean(df["sys_avg_speed"][:3600])
+
+# # total_agents_tyre_pm = sum(df["agents_tyre_pm"][:3600])
+# # mean_agents_stopped = np.mean(df["agents_stopped"][:3600])
+# # mean_agents_total_delay = np.mean(df["agents_total_delay"][:3600])
+# # mean_agents_total_wait = np.mean(df["agents_total_wait"][:3600])
+# # mean_agents_avg_delay = np.mean(df["agents_avg_delay"][:3600])
+# # mean_agents_avg_wait = np.mean(df["agents_avg_wait"][:3600])
+# # mean_agents_avg_speed = np.mean(df["agents_avg_speed"][:3600])
+
+
+# # output_path_abs = os.path.abspath("outputs/2x2grid")
+# # collate_csv_path = os.path.join(output_path_abs, "collated_results.csv")
+# # with open(collate_csv_path, "a", newline="") as f:
+# #     writer = csv.writer(f)
+# #     writer.writerow([seed, total_arrived, total_sys_tyre_pm, mean_sys_stopped,
+# #                         mean_sys_total_wait, mean_sys_avg_wait, mean_sys_avg_speed,
+# #                         total_agents_tyre_pm, mean_agents_stopped, mean_agents_total_delay,
+# #                         mean_agents_total_wait, mean_agents_avg_delay,
+# #                         mean_agents_avg_wait, mean_agents_avg_speed])
+    
+# rllib_par_env.close()
