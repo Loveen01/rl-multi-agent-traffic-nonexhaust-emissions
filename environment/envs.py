@@ -41,9 +41,6 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
         
         self.single_eval_mode = single_eval_mode
 
-        # if the eval_mode is batch, then i want to plot mean values on tensorboard + store mean values on csv
-        # if the env mode is single, then i want to plot all values on tensorboard
-
         # both of these cannot be set to true.
         assert not (single_eval_mode and multiple_eval_mode), "single_eval_mode and multiple_eval_mode are both true"
                   
@@ -54,20 +51,11 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
             assert csv_path is not None, f"csv path not given, needed in order to save metrics"
             self.csv_path = csv_path
         
-        # else: # if its just training phase 
-        #     current_time = datetime.now().strftime("%Y-%m-%d_%H_%M")
-        #     self.csv_path = os.path.join(csv_path, f"training_metrics_{current_time}.csv")
-
         self.tb_log_dir = tb_log_dir
 
         if tb_log_dir:
             self.tb_writer = SummaryWriter(tb_log_dir)  # prep TensorBoard
 
-        # if not self.eval_mode:
-        #     assert train_sim_period is not None, f"train_sim_period is {train_sim_period} \
-        #     must be an integer"
-        #     self.train_sim_period = train_sim_period
-            
         # Initialise cumulative system counters
         self.episode_sys_abs_accel = 0
         self.episode_sys_arrived_so_far = 0
@@ -100,7 +88,8 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
                                   "sys_total_wait", 
                                   "sys_avg_wait", 
                                   "sys_avg_speed", 
-                                  "sys_arrived_vehicles_at_destination"] 
+                                  "sys_arrived_vehicles_at_destination",
+                                  "sys_accum_waiting_time"] 
                 
                 headers += system_metrics 
 
@@ -123,6 +112,8 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
                 headers = (headers)
                 csv_writer.writerow(headers)
 
+        self.reward_hold = Counter({ts: 0 for ts in self.ts_ids})
+        
     def _get_system_info(self):
         vehicles = self.sumo.vehicle.getIDList()
         speeds = [self.sumo.vehicle.getSpeed(vehicle) for vehicle in vehicles]
@@ -200,8 +191,9 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
                                       summary_episode_world_stats)
 
             if self.single_eval_mode:
-                self.log_tensor_step_metrics(agent_stats, system_stats)
-
+                self.log_tensor_step_metrics(agent_stats=agent_stats,
+                                             system_stats=system_stats,
+                                             label='single_eval')
 
     def compute_system_metrics(self):
         '''collect system metrics. Should be called for every SUMO simulation second'''
@@ -211,10 +203,12 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
         speeds = [self.sumo.vehicle.getSpeed(veh) for veh in vehicles] # [speedv1 speedv2]
         waiting_times = [self.sumo.vehicle.getWaitingTime(veh) for veh in vehicles] # [waitv1 waitv2]
 
+        accum_waiting_times = [self.sumo.vehicle.getAccumulatedWaitingTime(veh) for veh in vehicles]
+
         system_tyre_pm = get_tyre_pm()  # abs accelerations of all vehicles in network 
         system_arrived_num = self.sumo.simulation.getArrivedNumber() 
         
-        # append to cumulative counters - absolute accelerations
+        # append to class cumulative counters - absolute accelerations
         self.episode_sys_abs_accel += system_tyre_pm 
         self.episode_sys_arrived_so_far += system_arrived_num 
         
@@ -224,7 +218,8 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
             "system_total_waiting_time": sum(waiting_times),
             "system_avg_waiting_time": 0.0 if len(vehicles) == 0 else np.mean(waiting_times),
             "system_avg_speed": 0.0 if len(vehicles) == 0 else np.mean(speeds),
-            "system_arrived_vehicles_at_destination": system_arrived_num
+            "system_arrived_vehicles_at_destination": system_arrived_num,
+            "system_accum_waiting_time" : sum(accum_waiting_times)
         }
         
         return system_stats
@@ -237,8 +232,8 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
             sum(self.traffic_signals[ts].get_accumulated_waiting_time_per_lane()) for ts in self.ts_ids
         ]
         average_speed = [self.traffic_signals[ts].get_average_speed() for ts in self.ts_ids]
-        abs_accelerations = [get_tyre_pm(ts) for ts in self.traffic_signals.values()]
-        
+        abs_accelerations = [get_tyre_pm(ts) for ts in self.ts_ids]
+
         # append to agent-specific cumulative counters 
         for i, ts in enumerate(self.ts_ids):
             self.episode_abs_accel[i] += abs_accelerations[i]
@@ -310,10 +305,9 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
         self.episode_stopped = [0] * len(self.ts_ids)
         self.episode_reward_total = [0] * len(self.ts_ids)
 
-    def log_csv_step_metrics(self,  system_stats, agent_stats, summary_episode_world_stats, summary_episode_agent_stats):
+    def log_csv_step_metrics(self, system_stats, agent_stats, summary_episode_world_stats, summary_episode_agent_stats):
         '''log metrics to csv file. If data is none, then plot all zeros'''
-        # assert self.sim_step == self.sim_max_time, f'currrent step {self.sim_step} is not equal to {self.sim_max_time}'
-
+        
         if self.csv_path:
             with open(self.csv_path, "a", newline="", ) as f:
                 csv_writer = csv.writer(f, lineterminator='\n')
@@ -367,7 +361,7 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
             If single_agent is True, action is an int, otherwise it expects a dict with keys corresponding to traffic signal ids.
         """
         # No action, follow fixed TL defined in self.phases
-        if action is None or action == {}:
+        if self.fixed_ts or action is None or action == {}:
             # Rewards for the sumo steps between every env step
             self.reward_hold = Counter({ts: 0 for ts in self.ts_ids})
             for _ in range(self.delta_time):
@@ -407,9 +401,9 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
 
     def _compute_rewards(self): # this func is called in step()
         self.rewards.update(
-            {ts: self.reward_hold[ts] for ts in self.ts_ids if self.traffic_signals[ts].time_to_act}
+            {ts: self.reward_hold[ts] for ts in self.ts_ids if self.traffic_signals[ts].time_to_act or self.fixed_ts}
         )
-        return {ts: self.rewards[ts] for ts in self.rewards.keys() if self.traffic_signals[ts].time_to_act} # same thing as returning rewards_hold ... why not return rewards_hold?
+        return {ts: self.rewards[ts] for ts in self.rewards.keys() if self.traffic_signals[ts].time_to_act or self.fixed_ts} # same thing as returning rewards_hold ... why not return rewards_hold?
 
     def _compute_info(self):
         info = {"__common__": {"step": self.sim_step}}
@@ -460,12 +454,16 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
 # instead of self.env = SumoEnvironment(), its self.env = SumoEnvironmentCountAllRewards()
 class SumoEnvironmentPZCountAllRewards(SumoEnvironmentPZ):
     """A wrapper for `SumoEnvironmentCountAllRewards` subclasses SumoEnvironmentPZ"""
-    def __init__(self, eval_mode=False, csv_path: Optional[str] = None, tb_log_dir: Optional[str] = None, **kwargs):
+    def __init__(self, single_eval_mode: bool = False, multiple_eval_mode : bool = False, csv_path: Optional[str] = None, tb_log_dir: Optional[str] = None, **kwargs):
         EzPickle.__init__(self, **kwargs)
         self._kwargs = kwargs
 
         self.seed()
-        self.env = SumoEnvironmentCountAllRewards(**self._kwargs, eval_mode=eval_mode, csv_path=csv_path, tb_log_dir=tb_log_dir)  # instead of SumoEnvironment. CountAllRewardsEnv is subclass of SumoEnv  
+        self.env = SumoEnvironmentCountAllRewards(**self._kwargs, 
+                                                  single_eval_mode=single_eval_mode,
+                                                  multiple_eval_mode=multiple_eval_mode,
+                                                  csv_path=csv_path,
+                                                  tb_log_dir=tb_log_dir)  # instead of SumoEnvironment. CountAllRewardsEnv is subclass of SumoEnv  
 
         self.agents = self.env.ts_ids  # do you really need to redefine all the attributes, they are already inherited from SumoEnvPz?
         self.possible_agents = self.env.ts_ids
