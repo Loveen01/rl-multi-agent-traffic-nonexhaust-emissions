@@ -112,6 +112,7 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
                 headers = (headers)
                 csv_writer.writerow(headers)
 
+        # store rewards here -> 
         self.reward_hold = Counter({ts: 0 for ts in self.ts_ids})
         
     def _get_system_info(self):
@@ -479,7 +480,51 @@ class SumoEnvironmentPZCountAllRewards(SumoEnvironmentPZ):
         self.terminations = {a: False for a in self.agents}
         self.truncations = {a: False for a in self.agents}
         self.infos = {a: {} for a in self.agents}
+
+    def step(self, action):
+        """Step the environment. Need to override original parent class, 
+        reason why is because in the parent class, it counts all rewards within _run_steps()
+        function, which is implemented in the SumoEnvCountAllRewards() class.
+        However it misses to measure rewards if self.env.fixed_ts is set to True.
+        Therefore this class serves to put it here.
+        """
+        if self.truncations[self.agent_selection] or self.terminations[self.agent_selection]:
+            return self._was_dead_step(action)
+        agent = self.agent_selection # agent currently being stepped 
         
+        # if not self.env.fixed_ts:
+        if not self.action_spaces[agent].contains(action):
+            raise Exception(
+                "Action for agent {} must be in Discrete({})."
+                "It is currently {}".format(agent, self.action_spaces[agent].n, action)
+            )
+
+        if not self.env.fixed_ts:
+            self.env._apply_actions({agent: action})
+
+        if self._agent_selector.is_last(): # check if current agent is last agent 
+            if not self.env.fixed_ts:
+                self.env._run_steps()
+            else:
+                # measure rewards 
+                self.env.reward_hold = Counter({ts: 0 for ts in self.env.ts_ids})
+                for _ in range(self.env.delta_time):
+                    self.env._sumo_step()
+                    r = {ts: self.env.traffic_signals[ts].compute_reward() for ts in self.env.ts_ids}
+                    self.env.reward_hold.update(r)  # add r to reward_hold Counter
+            self.env._compute_observations()
+            self.rewards = self.env._compute_rewards()
+            self.compute_info()
+            # print("self.rewards", self.rewards)
+        else:
+            self._clear_rewards()
+
+        done = self.env._compute_dones()["__all__"]
+        self.truncations = {a: done for a in self.agents}
+
+        self.agent_selection = self._agent_selector.next()
+        self._cumulative_rewards[agent] = 0
+        self._accumulate_rewards()
 
     # @property
     # def action_space(self):
