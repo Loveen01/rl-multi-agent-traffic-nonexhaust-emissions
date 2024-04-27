@@ -2,8 +2,9 @@ import torch
 import numpy as np 
 
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+import json 
 
-
+import os
 
 def convert_arr_to_tensor(obs:np.ndarray):
     assert (type(obs) is np.ndarray)
@@ -24,26 +25,6 @@ def generate_sampler(batch_size, minibatch_size ):
     sampler = BatchSampler(subset_sampler, minibatch_size, True) 
     return sampler 
 
-# def config_to_text(config):
-#     text = f"Config Settings:\n\n"
-#     text += f"DEVICE: {config.device}\n"
-#     text += f"state_dim: {config.state_dim}\n"
-#     text += f"action_dim: {config.action_dim}\n"
-#     text += f"lr: {config.lr}\n"
-#     text += f"no_hidden_layers: {config.no_hidden_layers}\n"
-#     text += f"no_episodes: {config.no_episodes}\n"
-#     text += f"rollout_length: {config.rollout_length}\n"
-#     text += f"no_training_iterations: {config.no_training_iterations}\n"
-#     text += f"optimisation_epochs: {config.optimisation_epochs}\n"
-#     text += f"minibatch_size: {config.minibatch_size}\n"
-#     text += f"discount: {config.discount}\n"
-#     text += f"ppo_ratio_clip: {config.ppo_ratio_clip}\n"
-#     text += f"gae_lamda: {config.gae_lamda}\n"
-#     # text += f"logger_dir: {config.logger_dir}\n"
-#     text += f"play_only: {config.play_only}\n"
-#     text += f"saved_checkpoint: {config.saved_checkpoint}\n"
-#     return text
-
 def config_to_text(config):
     text = f"Config Settings:\n\n"
     for attr, value in vars(config).items():
@@ -59,3 +40,32 @@ def save_configs(config, config_txt_file_path):
         text_file.write(text)
     
     print(f"Config text file saved to {config_txt_file_path}")
+
+def extract_folder_from_path(path:str, index:int) -> str:
+    '''extracts a folder from a path, given an index'''
+
+    # Split the path into components
+    path_parts = path.split(os.sep)
+
+    assert(index < len(path_parts)), f"Index out of range: attempted to access index {index}, but there are only {len(path_parts)} parts."
+    # Extract the third folder (remember that indexing starts at 0)
+    extracted_folder = path_parts[index]
+
+    return extracted_folder
+
+class CustomEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if callable(obj):
+            return f"{obj.__module__}.{obj.__name__}"
+        if isinstance(obj, type):  # For classes
+            return f"{obj.__module__}.{obj.__name__}"
+        return json.JSONEncoder.default(self, obj)
+    
+def extract_folder_from_paths(list_of_paths, index) -> list[str]:
+    '''extracts the dir_names from from paths here, given an index of position of dir_name on the path'''
+    extracted_folder_list = []
+    for path in list_of_paths:
+        extracted_folder = extract_folder_from_path(path, index)
+        extracted_folder_list.append(extracted_folder)
+    return extracted_folder_list
+
