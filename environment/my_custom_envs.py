@@ -104,7 +104,7 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
                     ts_summary_metrics = [f"{ts}_episode_abs_accel",
                                   f"{ts}_episode_average_speed",
                                   f"{ts}_episode_accumulated_waiting_time",
-                                  f"{ts}_episode_stopped"
+                                  f"{ts}_episode_stopped",
                                   f"{ts}_episode_reward_total"]
                     
                     headers += ts_summary_metrics
@@ -171,16 +171,13 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
             
             if self.sim_step != self.sim_max_time:
                 summary_episode_agent_stats = None 
-                summary_episode_world_stats = None
 
             else: 
                 summary_episode_agent_stats = self.compute_episode_agent_stats()
-                summary_episode_world_stats = self.compute_episode_world_stats()
                 
                 if self.multiple_eval_mode:
                     # if hasattr(self, "tb_writer"):
                     self.log_tensor_summary_metrics(summary_episode_agent_stats,
-                                                    summary_episode_world_stats,
                                                     label="episodic_eval")
 
                 self.reset_episodic_stats()
@@ -188,8 +185,7 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
             # store values over multiple episodes in in csv file 
             self.log_csv_step_metrics(system_stats, 
                                       agent_stats,
-                                      summary_episode_agent_stats,
-                                      summary_episode_world_stats)
+                                      summary_episode_agent_stats)
 
             if self.single_eval_mode:
                 self.log_tensor_step_metrics(agent_stats=agent_stats,
@@ -279,19 +275,19 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
         
         return summary_episode_agent_stats
    
-    def compute_episode_world_stats(self):
+    # def compute_episode_world_stats(self):
 
-        # either returns sumo time period over an episode or
-        # returns sumo time period equal to training period 
-        assert self.sim_step == self.sim_max_time, \
-            f"Simulation step {self.sim_step} does not equal the maximum simulation time {self.sim_max_time}"
-        time_period = self.sim_max_time
+    #     # either returns sumo time period over an episode or
+    #     # returns sumo time period equal to training period 
+    #     assert self.sim_step == self.sim_max_time, \
+    #         f"Simulation step {self.sim_step} does not equal the maximum simulation time {self.sim_max_time}"
+    #     time_period = self.sim_max_time
 
-        summary_episode_world_stats = {}
-        summary_episode_world_stats[f"episode_sys_abs_accel"] = self.episode_sys_abs_accel / time_period
-        summary_episode_world_stats[f"episode_sys_arrived_so_far"] = self.episode_sys_arrived_so_far / time_period
+    #     summary_episode_world_stats = {}
+    #     summary_episode_world_stats[f"episode_sys_abs_accel"] = self.episode_sys_abs_accel / time_period
+    #     summary_episode_world_stats[f"episode_sys_arrived_so_far"] = self.episode_sys_arrived_so_far / time_period
         
-        return summary_episode_world_stats
+    #     return summary_episode_world_stats
     
     def reset_episodic_stats(self):
         '''reset the episodic variables'''
@@ -306,24 +302,22 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
         self.episode_stopped = [0] * len(self.ts_ids)
         self.episode_reward_total = [0] * len(self.ts_ids)
 
-    def log_csv_step_metrics(self, system_stats, agent_stats, summary_episode_world_stats, summary_episode_agent_stats):
+    def log_csv_step_metrics(self, system_stats, agent_stats, summary_episode_agent_stats):
         '''log metrics to csv file. If data is none, then plot all zeros'''
         
         if self.csv_path:
             with open(self.csv_path, "a", newline="", ) as f:
                 csv_writer = csv.writer(f, lineterminator='\n')
                 
-                if not summary_episode_world_stats and not summary_episode_agent_stats: # if these are both Nones 
+                if not summary_episode_agent_stats: # if these are Nones 
                     data = ([self.sim_step, self.episode]
                             + list(system_stats.values())
                             + list(agent_stats.values())
-                            + [0 for i in range(self.ts_summary_world_metrics_dims)]
                             + [0 for i in range(self.ts_summary_agent_metrics_dims)])
                 else: 
                     data = ([self.sim_step, self.episode]
                             + list(system_stats.values())
                             + list(agent_stats.values())
-                            + list(summary_episode_world_stats.values())
                             + list(summary_episode_agent_stats.values()))
                     
                 csv_writer.writerow(data)
@@ -336,8 +330,8 @@ class SumoEnvironmentCountAllRewards(SumoEnvironment):
         assert (self.sim_step == self.sim_max_time), \
             f"Simulation step {self.sim_step} does not equal the maximum simulation time, {self.sim_max_time}"
         
-        for stat, val in summary_episode_world_stats.items():
-                self.tb_writer.add_scalar(f"{label}/system/{stat}", val, x)
+        # for stat, val in summary_episode_world_stats.items():
+        #         self.tb_writer.add_scalar(f"{label}/system/{stat}", val, x)
     
         for stat, val in summary_episode_agent_stats.items():
                 self.tb_writer.add_scalar(f"{label}/agent_{stat[0]}/{stat[2:]}", val, x)
