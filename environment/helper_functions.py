@@ -17,6 +17,7 @@ def get_total_waiting_time(ts: Optional[TrafficSignal] = None) -> float:
     Keyword arguments
         ts: the TrafficSignal object
     """
+    # waiting time for all the vehicles in the lanes around an intersection 
     if ts:
         return sum(ts.sumo.lane.getWaitingTime(lane) for lane in ts.lanes)
     
@@ -66,48 +67,3 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
         return progress_remaining * initial_value
 
     return func
-
-
-def pz_env(**kwargs):
-    """Instantiate a PettingZoo environment using `CountAllRewardsEnvPZ`."""
-    from envs import CountAllRewardsEnvPZ
-
-    env = CountAllRewardsEnvPZ(**kwargs)
-    env = wrappers.AssertOutOfBoundsWrapper(env)
-    env = wrappers.OrderEnforcingWrapper(env)
-    return env
-
-make_parallel_env = parallel_wrapper_fn(pz_env)
-
-
-def sumo_vec_env(
-        num_envs=1,
-        seed: Optional[int] = None,
-        start_index: int = 0,
-        env_kwargs: Optional[Dict[str, Any]] = None,
-):
-    """Create a wrapped and monitored (single-agent) `CountAllRewardsEnv` using Stable_Baselines3's `DummyVecEnv`.
-    
-    :return: Stable Baselines3 `DummyVecEnv`
-    """
-    from stable_baselines3.common.monitor import Monitor
-    from stable_baselines3.common.utils import compat_gym_seed
-    from stable_baselines3.common.vec_env import DummyVecEnv
-    from stable_baselines3.common.vec_env.patch_gym import _patch_env
-    from envs import CountAllRewardsEnv
-    
-    def make_env(rank: int) -> Callable[[], gym.Env]:
-        def _init() -> gym.Env:
-            env = CountAllRewardsEnv(**env_kwargs)
-            env = Monitor(env)
-            env = _patch_env(env)
-
-            if seed is not None:
-                compat_gym_seed(env, seed=seed + rank)
-                env.action_space.seed(seed + rank)
-
-            return env
-        
-        return _init
-    
-    return DummyVecEnv([make_env(i + start_index) for i in range(num_envs)])

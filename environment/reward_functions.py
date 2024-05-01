@@ -1,7 +1,7 @@
 from sumo_rl import TrafficSignal
-
 from environment.helper_functions import get_total_waiting_time, get_tyre_pm
 
+from dataclasses import dataclass
 
 def tyre_pm_reward(ts: TrafficSignal) -> float:
     """Return the reward as the amount of tyre PM emitted.
@@ -46,11 +46,31 @@ def delta_wait_time_reward(ts: TrafficSignal) -> float:
 
     return reward
 
-
-def combined_reward(ts: TrafficSignal, congestion_reward=delta_wait_time_reward, alpha=0.875) -> float:
-    """Return the reward summing tyre PM and change in total waiting time.
+def combined_reward_function_factory_with_delta_wait_time(alpha):
+    '''this class uses both the tyre pm reward as well as the delta waiting time reward
+    named from combined_reward_function_factory to '''
     
-    Keyword arguments
-        ts: the TrafficSignal object
-    """
-    return tyre_pm_reward(ts) + alpha*congestion_reward(ts)
+    def combined_reward(ts: TrafficSignal, congestion_reward=delta_wait_time_reward) -> float:
+        """Return the reward summing tyre PM and change in total waiting time.
+        
+        Keyword arguments
+            ts: the TrafficSignal object
+        """
+        return tyre_pm_reward(ts) + alpha*congestion_reward(ts)
+    
+    return combined_reward
+
+
+# def combined_reward(ts: TrafficSignal, congestion_reward=delta_wait_time_reward, alpha=0.875) -> float:
+#     """Return the reward summing tyre PM and change in total waiting time.
+    
+#     Keyword arguments
+#         ts: the TrafficSignal object
+#     """
+#     return tyre_pm_reward(ts) + alpha*congestion_reward(ts)
+
+
+@dataclass
+class RewardConfig:
+    function_factory: callable
+    congestion_coefficient: str
